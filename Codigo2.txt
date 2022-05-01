@@ -1,0 +1,146 @@
+import sys
+import math
+#import numpy
+from numpy import array
+from numpy.linalg import norm
+#import numpy.linalg
+# Auto-generated code below aims at helping you parse
+# the standard input according to the problem statement.
+
+# base_x: The corner of the map representing your base
+base_x, base_y = [int(i) for i in input().split()]
+heroes_per_player = int(input())  # Always 3
+monstruos=[]
+heroe=[]
+num_heroe=0
+tiempo_heroe=[100,100,100]
+Posicion_heroe=[]
+Posicion_heroe_d=array([[0,0],[0,0],[0,0]])
+Posicion_monstruo=[]
+constantes_distancia=array([0,5e3,5e3])
+constantes_cercania=array([1e3,0,10e7])
+constantes_exploracion=array([1e2,0,1e1])
+constantes_espaciamiento=array([6e2,6e2,1e1])
+salir=0
+#print("cosa", file=sys.stderr, flush=True)
+# game loop
+while True:
+    my_health, my_mana = [int(j) for j in input().split()]
+    enemy_health, enemy_mana = [int(j) for j in input().split()]
+
+    entity_count = int(input())  # Amount of heros and monsters you can see
+    for i in range(entity_count):
+        # _id: Unique identifier
+        # _type: 0=monster, 1=your hero, 2=opponent hero
+        # x: Position of this entity
+        # shield_life: Ignore for this league; Count down until shield spell fades
+        # is_controlled: Ignore for this league; Equals 1 when this entity is under a control spell
+        # health: Remaining health of this monster
+        # vx: Trajectory of this monster
+        # near_base: 0=monster with no target yet, 1=monster targeting a base
+        # threat_for: Given this monster's trajectory, is it a threat to 1=your base, 2=your opponent's base, 0=neither
+        _id, _type, x, y, shield_life, is_controlled, health, vx, vy, near_base, threat_for = [int(j) for j in input().split()]
+    #Cálculos antes de tener toda la información
+        if _type==1:
+            heroe.append((_id,x,y,0))
+            Posicion_heroe.append(array([x,y]))
+        if _type==0:
+            #Calculo de la funcion de peligrosidad
+            distancia=math.hypot(x-base_x,y-base_y)
+            tiempo_impacto=distancia/math.hypot(vx,vy)
+            peligrosidad=(1/(tiempo_impacto+1))*(near_base+threat_for%2)*health*((1/(distancia+1))**2)/3600000
+            #agregar monstruos como lista y su posicion como vector
+            monstruos.append((peligrosidad,distancia,_id,x,y,health,vx,vy,near_base,threat_for,is_controlled))
+            Posicion_monstruo.append(array([x,y]))
+    #Cálculos después de tener toda la información
+    if len(monstruos)>0:
+        #monstruos.sort(key=lambda y: y[1],reverse=True) #ordenar monstruos de mayor a menor basados en la segunda columna
+        monstruos.sort(key=lambda y: y[1]) #ordenar monstruos de mayor a menor basados en la segunda columna
+        for i in range(heroes_per_player):
+            #Ventaja en turnos tendría el héroe para llegar a la base si el monstruo mayor y el héroe fueran en línea recta hacia la base
+            tiempo_heroe[i]=(math.hypot(base_x-monstruos[0][3],base_y-monstruos[0][4])/math.hypot(monstruos[0][6],monstruos[0][7]))-(math.hypot(base_x-heroe[i][1],base_y-heroe[i][2])/800)
+    
+
+#New Strategy: from a control systems perspective
+    #Posicion deseada para el héroe
+    for i in range(heroes_per_player):
+        if len(Posicion_monstruo)>0:
+            Posicion_heroe_d=0.7*Posicion_heroe_d
+            id_mas_cercano=monstruos[0][2] #ID del monstruo más cercano al héroe
+            id_distancia=norm(Posicion_heroe[i]-array([monstruos[0][3],monstruos[0][4]]),2)
+            for kd in range(len(Posicion_monstruo)):
+                x=monstruos[kd][3]
+                y=monstruos[kd][4]
+                x_heroe=Posicion_heroe[i][0]
+                y_heroe=Posicion_heroe[i][1]
+                distancia=monstruos[kd][1]
+                _id=monstruos[kd][2]
+                is_controlled=monstruos[kd][10]
+                #Buscar el monstruo más cercano al héroe
+                if math.hypot(x-x_heroe,y-y_heroe)<id_distancia and is_controlled!=1:
+                    id_distancia=math.hypot(x-x_heroe,y-y_heroe)
+                    id_mas_cercano=_id
+                
+                print("Posicion_heroe_d...", Posicion_heroe_d[i][0],Posicion_heroe_d[i][1], file=sys.stderr, flush=True)
+                print("Vector...", (-Posicion_heroe[i]+Posicion_monstruo[kd])/norm(Posicion_heroe[i]-Posicion_monstruo[kd],2), file=sys.stderr, flush=True)
+                vector_al_monstruo=(-Posicion_heroe[i]+Posicion_monstruo[kd])/(norm(Posicion_heroe[i]-Posicion_monstruo[kd],2)+array([1]))
+                #Debug
+                print("vector_a_m...", vector_al_monstruo, file=sys.stderr, flush=True)
+                vector_distancia=(constantes_distancia[i]/((monstruos[kd][1]+1))**3)*vector_al_monstruo
+                #Debug
+                print("Vector_d...", vector_distancia, file=sys.stderr, flush=True)
+                vector_cercania=constantes_cercania[i]/(1+math.hypot(x-x_heroe,y-y_heroe)**2)*vector_al_monstruo
+                #Debug
+                print("vector_c...", vector_cercania, file=sys.stderr, flush=True)
+                vector_exploracion=constantes_exploracion[i]*(-Posicion_heroe[i]+array([8000,4000]))/(norm(-Posicion_heroe[i]+array([8000,4000]),2)+1)
+                #Debug
+                print("vector_e...", vector_exploracion, file=sys.stderr, flush=True)
+
+                vector_espaciamiento=array([0,0])
+                for ku in range(heroes_per_player):
+                    vector_espaciamiento=vector_espaciamiento+constantes_espaciamiento[i]*(Posicion_heroe[ku]-Posicion_heroe[i])/(norm(Posicion_heroe[ku]-Posicion_heroe[i],2)+1)
+                
+                Posicion_heroe_d[i]=Posicion_heroe_d[i]+vector_distancia+vector_cercania+vector_exploracion+vector_espaciamiento
+            #Debug
+            print("Target...", round(max(min(Posicion_heroe[i][0]+Posicion_heroe_d[i][0],17630),0)),round(min(max(Posicion_heroe[i][1]+Posicion_heroe_d[i][1],0),9000)), file=sys.stderr, flush=True)
+            #Emergencia, ir hacia el monstruo más cercano a la base
+            if tiempo_heroe[i]<5:
+                if tiempo_heroe[i]<2 and my_mana>10:
+                    print("SPELL WIND",17630-base_x,9000-base_y,i)
+                else:
+                    if math.hypot(monstruos[0][3]-x_heroe,monstruos[0][4]-y_heroe)<2200 and my_mana>10 and monstruos[0][10]!=1:
+                        print("SPELL CONTROL",id_mas_cercano,17630-base_x,9000-base_y,i)
+                    elif math.hypot(monstruos[0][3]-x_heroe,monstruos[0][4]-y_heroe)<100 and my_mana>10:
+                        print("SPELL WIND",17630-base_x,9000-base_y,i)
+                    else:
+                        print("MOVE",monstruos[0][3],monstruos[0][4],"alerta")
+            #No hay emergencia
+            else:
+                #SPELL CONTROL
+                if math.hypot(monstruos[0][3]-x_heroe,monstruos[0][4]-y_heroe)>1500 and math.hypot(monstruos[0][3]-x_heroe,monstruos[0][4]-y_heroe)<2200 and my_mana>10 and monstruos[0][10]!=1:
+                    print("SPELL CONTROL",id_mas_cercano,17630-base_x,9000-base_y,i)
+                #SPELL WIND
+                elif (norm(Posicion_heroe_d[i],2)<1e9 and my_mana>10) or (math.hypot(Posicion_heroe[i][0],Posicion_heroe[i][1])<2000 and my_mana>10):
+                    print("SPELL WIND",17630-base_x,9000-base_y,i)
+                #Movimiento
+                else:
+                    print("MOVE",round(max(min(Posicion_heroe[i][0]+Posicion_heroe_d[i][0],17630),0)),round(min(max(Posicion_heroe[i][1]+Posicion_heroe_d[i][1],0),9000)),i)
+        else:
+            print("MOVE",8000,4000)
+            print("MOVE",10000,2000)
+            print("MOVE",2000,10000)
+            break
+        #Debugging
+        #if len(monstruos)>1:
+        #    print("Debug messages...", Posicion_monstruo[:], file=sys.stderr, flush=True)
+        #print("Debug messages...", Posicion_heroe[1]+2*Posicion_heroe[2], file=sys.stderr, flush=True)
+        #print("Debug messages...", len(monstruos), file=sys.stderr, flush=True)
+    
+    # Initialize everything again
+    heroe=[]
+    monstruos=[]
+    Posicion_monstruo=[]
+    Posicion_heroe=[]
+    # Write an action using print
+    # To debug: print("Debug messages...", file=sys.stderr, flush=True)
+    # In the first league: MOVE <x> <y> | WAIT; In later leagues: | SPELL <spellParams>;
